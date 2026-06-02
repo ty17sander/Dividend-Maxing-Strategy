@@ -621,63 +621,120 @@ def run_stress_test(price_data, div_data, fetch_status, scores, cfg):
 # ══════════════════════════════════════════════════════════════════════════════
 
 def generate_trades(holdings, scores, price_data, div_data, cfg):
+    """
+    Generates precise SELL / BUY / HOLD instructions based on:
+      - Your actual current holdings (shares you own right now)
+      - The model's target allocation
+      - Current live prices
+
+    Portfolio value = what you actually own (no margin added).
+    Target positions = what the model wants as % of your real equity.
+    Margin is treated as already deployed in your account — not added on top.
+    """
     target_w = compute_allocation(scores, cfg)
+
+    # Real portfolio value from actual holdings
     port_val = sum(
         h["shares"] * cur_price(t, price_data)
         for t, h in holdings.items() if h.get("shares", 0) > 0
-    ) or cfg["initial_capital"]
-    gross        = port_val * (1 + cfg["max_margin_pct"])
-    current_vals = {t: h["shares"] * cur_price(t, price_data) for t, h in holdings.items()}
-    buys, sells, holds = [], [], []
+    )
+    if port_val <= 0:
+        port_val = cfg["initial_capital"]
 
-    # Check existing holdings for sells
+    # Current position values
+    current_vals  = {}
+    current_shares = {}
     for t, h in holdings.items():
-        if h.get("shares", 0) <= 0:
-            continue
-        sc = scores.get(t, {}).get("total", 0)
-        if t not in target_w or sc < cfg["min_score_to_hold"]:
+        if h.get("shares", 0) > 0:
             p = cur_price(t, price_data)
+            current_vals[t]   = h["shares"] * p
+            current_shares[t] = h["shares"]
+
+    # Target position values — sized off real portfolio value
+    target_vals = {t: port_val * w for t, w in target_w.items()}
+
+    buys, sells, holds = [], [], []
+    threshold = port_val * 0.015   # ignore diffs < 1.5% of portfolio
+
+    # ── SELL: holdings not in target or below score threshold ────────────
+    for t, shares in current_shares.items():
+        sc    = scores.get(t, {}).get("total", 0)
+        price = cur_price(t, price_data)
+        if t not in target_w:
+            reason = "Not in model" if sc >= cfg["min_score_to_hold"] else f"Score {sc:.0f} below threshold"
             sells.append({
-                "Action": "SELL", "Ticker": t,
-                "Shares": h["shares"], "Price": p,
-                "Value": h["shares"] * p, "Score": round(sc, 1),
-                "Reason": "Score below threshold" if sc < cfg["min_score_to_hold"] else "Not in model",
+                "Action":        "🔴 SELL ALL",
+                "Ticker":        t,
+                "Shares to Sell": shares,
+                "@ Price":       price,
+                "Est. Proceeds": shares * price,
+                "You Own":       shares,
+                "Score":         round(sc, 1),
+                "Reason":        reason,
+            })
+        elif sc < cfg["min_score_to_hold"]:
+            sells.append({
+                "Action":        "🔴 SELL ALL",
+                "Ticker":        t,
+                "Shares to Sell": shares,
+                "@ Price":       price,
+                "Est. Proceeds": shares * price,
+                "You Own":       shares,
+                "Score":         round(sc, 1),
+                "Reason":        f"Score {sc:.0f} below hold threshold",
             })
 
-    # BUY / TRIM / HOLD for target positions
+    # ── BUY / TRIM / HOLD: for each target position ───────────────────────
     for t, w in target_w.items():
-        p          = cur_price(t, price_data)
-        target_val = gross * w
+        price      = cur_price(t, price_data)
+        target_val = target_vals[t]
         curr_val   = current_vals.get(t, 0.0)
-        diff       = target_val - curr_val
-        diff_sh    = diff / p if p > 0 else 0
-        threshold  = gross * 0.015
+        curr_sh    = current_shares.get(t, 0.0)
+        diff_val   = target_val - curr_val
+        diff_sh    = round(diff_val / price, 3) if price > 0 else 0
         sc         = round(scores.get(t, {}).get("total", 0), 1)
         y          = ttm_yield(t, price_data, div_data)
 
-        if abs(diff) < threshold:
+        if abs(diff_val) < threshold:
             holds.append({
-                "Action": "HOLD", "Ticker": t, "Score": sc, "Yield": y,
-                "Price": p, "Weight": w,
-                "Current $": curr_val, "Target $": target_val,
+                "Ticker":        t,
+                "You Own":       curr_sh,
+                "Target Shares": round(target_val / price, 3) if price > 0 else 0,
+                "@ Price":       price,
+                "Current $":     curr_val,
+                "Target $":      target_val,
+                "Diff":          f"{diff_val:+,.0f}",
+                "Yield":         f"{y:.1%}",
+                "Score":         sc,
             })
-        elif diff > 0:
+        elif diff_val > 0:
             buys.append({
-                "Action": "BUY", "Ticker": t,
-                "Shares": round(diff_sh, 3), "Price": p,
-                "Est. Cost": diff, "Score": sc, "Yield": y, "Weight": w,
+                "Action":        "🟢 BUY",
+                "Ticker":        t,
+                "Shares to Buy": diff_sh,
+                "@ Price":       price,
+                "Est. Cost":     diff_val,
+                "You Own":       curr_sh,
+                "Target Shares": round(target_val / price, 3) if price > 0 else 0,
+                "Yield":         f"{y:.1%}",
+                "Score":         sc,
             })
         else:
             sells.append({
-                "Action": "TRIM", "Ticker": t,
-                "Shares": round(abs(diff_sh), 3), "Price": p,
-                "Value": abs(diff), "Score": sc,
-                "Reason": f"Overweight vs {w:.1%} target",
+                "Action":        "🔴 TRIM",
+                "Ticker":        t,
+                "Shares to Sell": round(abs(diff_sh), 3),
+                "@ Price":       price,
+                "Est. Proceeds": abs(diff_val),
+                "You Own":       curr_sh,
+                "Score":         sc,
+                "Reason":        f"Overweight — target is {w:.1%} of portfolio",
             })
 
     buys.sort(key=lambda x: -x["Score"])
-    return buys, sells, holds
-
+    sells.sort(key=lambda x: x["Score"])   # worst score first
+    holds.sort(key=lambda x: -x["Score"])
+    return buys, sells, holds, port_val, target_w
 
 def append_score_history(scores):
     today = datetime.now().strftime("%Y-%m-%d")
@@ -1233,66 +1290,100 @@ def main():
 
         st.subheader(f"Weekly Recommendations — {datetime.now().strftime('%B %d, %Y')}{next_str}")
 
-        buys, sells, holds = generate_trades(holdings, scores, price_data, div_data, cfg)
-
-        port_val  = sum(h["shares"] * cur_price(t, price_data) for t, h in holdings.items() if h.get("shares", 0) > 0) or cfg["initial_capital"]
-        gross     = port_val * (1 + cfg["max_margin_pct"])
-        blend_y   = sum(target_w.get(t, 0) * ttm_yield(t, price_data, div_data) for t in target_w)
-        ann_inc   = gross * blend_y - port_val * cfg["max_margin_pct"] * cfg["margin_interest_rate"]
-
-        m1, m2, m3, m4, m5 = st.columns(5)
-        m1.metric("Portfolio Value",    f"${port_val:,.0f}")
-        m2.metric("w/ Margin",          f"${gross:,.0f}")
-        m3.metric("Est. Annual Income", f"${ann_inc:,.0f}")
-        m4.metric("Est. Monthly",       f"${ann_inc/12:,.0f}")
-        m5.metric("Positions in Model", str(len(target_w)))
-
-        st.divider()
-
-        if buys:
-            st.markdown("### 🟢 Buy")
-            st.dataframe(pd.DataFrame([{
-                "Ticker":       b["Ticker"],
-                "Shares":       b["Shares"],
-                "Price":        f"${b['Price']:.2f}",
-                "Est. Cost":    f"${b['Est. Cost']:,.2f}",
-                "Score":        b["Score"],
-                "Yield":        f"{b['Yield']:.1%}",
-                "Target Wt":    f"{b['Weight']:.1%}",
-                "Category":     ELIGIBLE.get(b["Ticker"], {}).get("cat", "?"),
-            } for b in buys]), hide_index=True, use_container_width=True)
+        if not holdings:
+            st.info("👈 Enter your holdings in the sidebar to get personalised trade recommendations.")
         else:
-            st.success("✅ No buys needed — portfolio is at target allocation")
+            buys, sells, holds, port_val, rec_target_w = generate_trades(
+                holdings, scores, price_data, div_data, cfg
+            )
 
-        if sells:
-            st.markdown("### 🔴 Sell / Trim")
-            st.dataframe(pd.DataFrame([{
-                "Ticker":  s["Ticker"],
-                "Action":  s["Action"],
-                "Shares":  s.get("Shares", "All"),
-                "Price":   f"${s['Price']:.2f}",
-                "Value":   f"${s['Value']:,.2f}",
-                "Score":   s["Score"],
-                "Reason":  s["Reason"],
-            } for s in sells]), hide_index=True, use_container_width=True)
+            blend_y  = sum(rec_target_w.get(t, 0) * ttm_yield(t, price_data, div_data) for t in rec_target_w)
+            ann_inc  = port_val * blend_y
+            cost_basis = sum(
+                h["shares"] * h.get("avg_cost", 0)
+                for t, h in holdings.items()
+                if h.get("shares", 0) > 0 and h.get("avg_cost", 0) > 0
+            )
+            unrealized = port_val - cost_basis if cost_basis > 0 else None
 
-        if holds:
-            with st.expander(f"🟡 Holds — {len(holds)} positions within target range"):
-                st.dataframe(pd.DataFrame([{
-                    "Ticker":   h["Ticker"],
-                    "Score":    h["Score"],
-                    "Yield":    f"{h['Yield']:.1%}",
-                    "Price":    f"${h['Price']:.2f}",
-                    "Current":  f"${h['Current $']:,.0f}",
-                    "Target":   f"${h['Target $']:,.0f}",
-                    "Weight":   f"{h['Weight']:.1%}",
-                } for h in holds]), hide_index=True, use_container_width=True)
+            # ── Snapshot ─────────────────────────────────────────────────
+            m1, m2, m3, m4 = st.columns(4)
+            m1.metric("Your Portfolio Value",   f"${port_val:,.0f}")
+            m2.metric("Blended Yield",          f"{blend_y:.1%}")
+            m3.metric("Est. Annual Income",     f"${ann_inc:,.0f}")
+            m4.metric("Est. Monthly Income",    f"${ann_inc/12:,.0f}")
+            if unrealized is not None:
+                st.caption(f"Unrealized P/L: **{'+'if unrealized>=0 else ''}{unrealized:,.0f}** "
+                           f"({unrealized/cost_basis:+.1%} on ${cost_basis:,.0f} cost basis)")
 
-        st.divider()
-        st.caption(
-            f"Scores recalculate every {cfg['refresh_days']} days on open, or click Force Refresh. "
-            f"Analyzing {len(ELIGIBLE)} funds. Recommendations are model-based — always verify with your broker."
-        )
+            st.divider()
+
+            # ── SELL / TRIM ───────────────────────────────────────────────
+            if sells:
+                st.markdown("### 🔴 Sell / Trim")
+                st.caption("These positions should be reduced or closed based on current scores and target weights.")
+                sell_df = pd.DataFrame([{
+                    "Action":         s["Action"],
+                    "Ticker":         s["Ticker"],
+                    "Shares to Sell": s["Shares to Sell"],
+                    "@ Price":        f"${s['@ Price']:.2f}",
+                    "Est. Proceeds":  f"${s['Est. Proceeds']:,.2f}",
+                    "You Own":        s["You Own"],
+                    "Score":          s["Score"],
+                    "Reason":         s["Reason"],
+                } for s in sells])
+                st.dataframe(sell_df, hide_index=True, use_container_width=True)
+            else:
+                st.success("✅ No sells needed — all holdings are in the target model")
+
+            st.divider()
+
+            # ── BUY ───────────────────────────────────────────────────────
+            if buys:
+                st.markdown("### 🟢 Buy")
+                st.caption("Add these positions to reach the target allocation.")
+                buy_df = pd.DataFrame([{
+                    "Ticker":         b["Ticker"],
+                    "Shares to Buy":  b["Shares to Buy"],
+                    "@ Price":        f"${b['@ Price']:.2f}",
+                    "Est. Cost":      f"${b['Est. Cost']:,.2f}",
+                    "You Currently Own": b["You Own"],
+                    "Target Shares":  b["Target Shares"],
+                    "Yield":          b["Yield"],
+                    "Score":          b["Score"],
+                } for b in buys])
+                st.dataframe(buy_df, hide_index=True, use_container_width=True)
+            else:
+                st.success("✅ No buys needed — all target positions are at weight")
+
+            st.divider()
+
+            # ── HOLD ─────────────────────────────────────────────────────
+            st.markdown("### 🟡 Hold — No action needed")
+            st.caption("These positions are within 1.5% of their target weight. Do nothing.")
+            if holds:
+                hold_df = pd.DataFrame([{
+                    "Ticker":        h["Ticker"],
+                    "You Own":       h["You Own"],
+                    "Target Shares": h["Target Shares"],
+                    "@ Price":       f"${h['@ Price']:.2f}",
+                    "Current $":     f"${h['Current $']:,.0f}",
+                    "Target $":      f"${h['Target $']:,.0f}",
+                    "Diff":          h["Diff"],
+                    "Yield":         h["Yield"],
+                    "Score":         h["Score"],
+                } for h in holds])
+                st.dataframe(hold_df, hide_index=True, use_container_width=True)
+            else:
+                st.info("No positions currently at target weight.")
+
+            st.divider()
+            st.caption(
+                f"Recommendations based on your {len(holdings)} holdings vs the model's "
+                f"{len(rec_target_w)}-position target. "
+                f"Scores refresh every {cfg['refresh_days']} days. "
+                f"Always verify prices with your broker before placing orders."
+            )
 
 
 if __name__ == "__main__":

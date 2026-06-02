@@ -14,6 +14,77 @@ from datetime import datetime, timedelta
 from scipy import stats
 from universe import UNIVERSE, ELIGIBLE, CAT_COLORS, QUALITY
 
+# ── Dividend pay frequency ────────────────────────────────────────────────────
+PAY_FREQ = {
+    "MSTY":"weekly","PLTY":"weekly","ULTY":"weekly",
+    "CONY":"monthly","NVDY":"monthly","TSLY":"monthly","AMDY":"monthly",
+    "YBIT":"monthly","GOOGY":"monthly","APLY":"monthly","NFLY":"monthly",
+    "AMZY":"monthly","MSFO":"monthly","SNOY":"monthly","SMCY":"monthly",
+    "PYPY":"monthly","GDXY":"monthly","XOMY":"monthly","OILY":"monthly",
+    "CVNY":"monthly","DISY":"monthly","BAMY":"monthly","JPMY":"monthly",
+    "MRNY":"monthly","ABNY":"monthly","FEPI":"monthly","RDTE":"monthly",
+    "FIVY":"monthly","BIGY":"monthly",
+    "JEPI":"monthly","JEPQ":"monthly","QYLD":"monthly","XYLD":"monthly",
+    "RYLD":"monthly","SPYI":"monthly","QQQI":"monthly","DIVO":"quarterly",
+    "GPIQ":"monthly","ISPY":"monthly","DJIA":"monthly","IWMY":"monthly",
+    "PUTW":"monthly","BUFR":"monthly","XYLG":"monthly","QYLG":"monthly",
+    "TYLG":"monthly","FTQI":"monthly","GPIX":"monthly","NUSI":"monthly",
+    "O":"monthly","STAG":"monthly","AGNC":"monthly","NLY":"quarterly",
+    "VICI":"quarterly","MPW":"quarterly","WPC":"quarterly","ADC":"quarterly",
+    "EPRT":"quarterly","LTC":"monthly","GOOD":"monthly","LAND":"monthly",
+    "IIPR":"quarterly","PINE":"monthly","BXMT":"quarterly","ACRE":"quarterly",
+    "BRSP":"quarterly","SACH":"quarterly","TWO":"quarterly","NREF":"quarterly",
+    "MAIN":"monthly","ARCC":"quarterly","HTGC":"quarterly","OBDC":"quarterly",
+    "GBDC":"quarterly","FSCO":"quarterly","TPVG":"quarterly","CGBD":"quarterly",
+    "SLRC":"quarterly","GAIN":"monthly","PFLT":"monthly","NMFC":"quarterly",
+    "SCM":"quarterly","CSWC":"quarterly","KCAP":"quarterly","BXSL":"quarterly",
+    "MFIC":"quarterly","HPAS":"quarterly",
+    "PDI":"monthly","UTF":"quarterly","GOF":"monthly","ECC":"monthly",
+    "AWP":"monthly","RQI":"monthly","ETY":"monthly","HIX":"monthly",
+    "HYT":"monthly","PCI":"monthly","PTY":"monthly","RFI":"monthly",
+    "CHI":"monthly","CII":"monthly","EVV":"monthly","JPC":"monthly",
+    "GDV":"quarterly","GLQ":"quarterly","NFJ":"quarterly","ETV":"monthly",
+    "IGR":"monthly","BCX":"quarterly","GGT":"monthly","BGB":"monthly","HIO":"monthly",
+    "PFF":"monthly","PFFD":"monthly","PFXF":"monthly","PSK":"quarterly",
+    "VRP":"monthly","PFFV":"monthly","IPFF":"quarterly","PFFA":"monthly",
+}
+_FREQ_DAYS = {"weekly": 7, "monthly": 30, "quarterly": 91}
+
+
+def next_exdiv_info(ticker, div_data):
+    """
+    Returns (days_until_exdiv, last_payment_date_str, frequency).
+    Uses the last actual dividend payment date + known pay frequency to estimate
+    the next ex-dividend date. Returns (None, None, None) if no data.
+    """
+    divs = div_data.get(ticker)
+    if divs is None or len(divs) == 0:
+        return None, None, None
+    s = divs.copy()
+    if hasattr(s.index, "tz") and s.index.tz is not None:
+        s.index = s.index.tz_convert("UTC")
+    last_date = s.index[-1].to_pydatetime().replace(tzinfo=None)
+    freq      = PAY_FREQ.get(ticker, "monthly")
+    period    = _FREQ_DAYS[freq]
+    today     = datetime.today()
+    next_dt   = last_date + timedelta(days=period)
+    while next_dt < today:
+        next_dt += timedelta(days=period)
+    return (next_dt - today).days, last_date.strftime("%b %d"), freq
+
+
+def exdiv_badge(days_left):
+    """Returns (emoji, short_label, block_sell_flag)."""
+    if days_left is None:
+        return "⚪", "No data", False
+    if days_left <= 3:
+        return "🔴", f"Ex-div {days_left}d — WAIT", True
+    if days_left <= 7:
+        return "🟠", f"Ex-div {days_left}d — soon", False
+    if days_left <= 14:
+        return "🟡", f"Ex-div {days_left}d", False
+    return "🟢", f"Ex-div {days_left}d", False
+
 warnings.filterwarnings("ignore")
 
 st.set_page_config(
@@ -660,10 +731,38 @@ def generate_trades(holdings, scores, price_data, div_data, cfg):
     for t, shares in current_shares.items():
         sc    = scores.get(t, {}).get("total", 0)
         price = cur_price(t, price_data)
+        days_left, last_pay, freq = next_exdiv_info(t, div_data)
+        emoji, badge, block_sell  = exdiv_badge(days_left)
+
+        should_sell = (t not in target_w) or (sc < cfg["min_score_to_hold"])
+        if not should_sell:
+            continue
+
+        reason = ""
         if t not in target_w:
             reason = "Not in model" if sc >= cfg["min_score_to_hold"] else f"Score {sc:.0f} below threshold"
+        else:
+            reason = f"Score {sc:.0f} below hold threshold"
+
+        # If ex-div is imminent, override to HOLD instead of sell
+        if block_sell:
+            holds.append({
+                "Ticker":        t,
+                "You Own":       shares,
+                "Target Shares": 0,
+                "@ Price":       price,
+                "Current $":     shares * price,
+                "Target $":      0,
+                "Diff":          f"-${shares*price:,.0f}",
+                "Yield":         f"{ttm_yield(t, price_data, div_data):.1%}",
+                "Score":         round(sc, 1),
+                "Ex-Div":        badge,
+                "Note":          f"Sell flagged BUT {badge} — collect dividend first",
+            })
+        else:
+            action = "🔴 SELL ALL" if t not in target_w or sc < cfg["min_score_to_hold"] else "🔴 TRIM"
             sells.append({
-                "Action":        "🔴 SELL ALL",
+                "Action":        action,
                 "Ticker":        t,
                 "Shares to Sell": shares,
                 "@ Price":       price,
@@ -671,21 +770,13 @@ def generate_trades(holdings, scores, price_data, div_data, cfg):
                 "You Own":       shares,
                 "Score":         round(sc, 1),
                 "Reason":        reason,
-            })
-        elif sc < cfg["min_score_to_hold"]:
-            sells.append({
-                "Action":        "🔴 SELL ALL",
-                "Ticker":        t,
-                "Shares to Sell": shares,
-                "@ Price":       price,
-                "Est. Proceeds": shares * price,
-                "You Own":       shares,
-                "Score":         round(sc, 1),
-                "Reason":        f"Score {sc:.0f} below hold threshold",
+                "Ex-Div":        badge,
             })
 
     # ── BUY / TRIM / HOLD: for each target position ───────────────────────
     for t, w in target_w.items():
+        # Skip if already added to sells above
+        already_selling = any(s["Ticker"] == t for s in sells)
         price      = cur_price(t, price_data)
         target_val = target_vals[t]
         curr_val   = current_vals.get(t, 0.0)
@@ -694,6 +785,8 @@ def generate_trades(holdings, scores, price_data, div_data, cfg):
         diff_sh    = round(diff_val / price, 3) if price > 0 else 0
         sc         = round(scores.get(t, {}).get("total", 0), 1)
         y          = ttm_yield(t, price_data, div_data)
+        days_left, last_pay, freq = next_exdiv_info(t, div_data)
+        emoji, badge, block_sell  = exdiv_badge(days_left)
 
         if abs(diff_val) < threshold:
             holds.append({
@@ -706,6 +799,7 @@ def generate_trades(holdings, scores, price_data, div_data, cfg):
                 "Diff":          f"{diff_val:+,.0f}",
                 "Yield":         f"{y:.1%}",
                 "Score":         sc,
+                "Ex-Div":        badge,
             })
         elif diff_val > 0:
             buys.append({
@@ -718,18 +812,37 @@ def generate_trades(holdings, scores, price_data, div_data, cfg):
                 "Target Shares": round(target_val / price, 3) if price > 0 else 0,
                 "Yield":         f"{y:.1%}",
                 "Score":         sc,
+                "Ex-Div":        badge,
             })
-        else:
-            sells.append({
-                "Action":        "🔴 TRIM",
-                "Ticker":        t,
-                "Shares to Sell": round(abs(diff_sh), 3),
-                "@ Price":       price,
-                "Est. Proceeds": abs(diff_val),
-                "You Own":       curr_sh,
-                "Score":         sc,
-                "Reason":        f"Overweight — target is {w:.1%} of portfolio",
-            })
+        elif not already_selling:
+            # It's a trim — check ex-div before recommending
+            if block_sell:
+                # Override: hold until after dividend
+                holds.append({
+                    "Ticker":        t,
+                    "You Own":       curr_sh,
+                    "Target Shares": round(target_val / price, 3) if price > 0 else 0,
+                    "@ Price":       price,
+                    "Current $":     curr_val,
+                    "Target $":      target_val,
+                    "Diff":          f"{diff_val:+,.0f}",
+                    "Yield":         f"{y:.1%}",
+                    "Score":         sc,
+                    "Ex-Div":        badge,
+                    "Note":          f"Trim flagged BUT {badge} — collect dividend first",
+                })
+            else:
+                sells.append({
+                    "Action":        "🔴 TRIM",
+                    "Ticker":        t,
+                    "Shares to Sell": round(abs(diff_sh), 3),
+                    "@ Price":       price,
+                    "Est. Proceeds": abs(diff_val),
+                    "You Own":       curr_sh,
+                    "Score":         sc,
+                    "Reason":        f"Overweight — target is {w:.1%} of portfolio",
+                    "Ex-Div":        badge,
+                })
 
     buys.sort(key=lambda x: -x["Score"])
     sells.sort(key=lambda x: x["Score"])   # worst score first
@@ -1318,10 +1431,40 @@ def main():
 
             st.divider()
 
+            # ── Dividend calendar for ALL holdings ───────────────────────
+            st.markdown("### 📅 Dividend Calendar — Your Holdings")
+            st.caption("Ex-dividend dates estimated from last payment + known pay frequency. "
+                       "Positions marked 🔴 will NOT be recommended for sale until after the dividend is collected.")
+            cal_rows = []
+            for t, h in sorted(holdings.items(), key=lambda x: x[0]):
+                if h.get("shares", 0) <= 0:
+                    continue
+                days_left, last_pay, freq = next_exdiv_info(t, div_data)
+                emoji, badge, block = exdiv_badge(days_left)
+                y     = ttm_yield(t, price_data, div_data)
+                price = cur_price(t, price_data)
+                # Estimated next dividend dollar amount
+                est_div_per_share = (price * y / (_FREQ_DAYS.get(freq, 30) / 30 * 12)) if y > 0 else 0
+                est_div_total     = est_div_per_share * h["shares"]
+                cal_rows.append({
+                    "Ticker":           t,
+                    "Shares":           h["shares"],
+                    "Freq":             freq.capitalize(),
+                    "Last Paid":        last_pay or "—",
+                    "Next Ex-Div":      badge,
+                    "Est. $ / Payment": f"${est_div_total:,.2f}",
+                    "Annual Yield":     f"{y:.1%}",
+                    "Status":           emoji,
+                })
+            if cal_rows:
+                st.dataframe(pd.DataFrame(cal_rows), hide_index=True, use_container_width=True)
+
+            st.divider()
+
             # ── SELL / TRIM ───────────────────────────────────────────────
             if sells:
                 st.markdown("### 🔴 Sell / Trim")
-                st.caption("These positions should be reduced or closed based on current scores and target weights.")
+                st.caption("Sell after collecting your dividend if ex-div is flagged 🟠 or 🔴.")
                 sell_df = pd.DataFrame([{
                     "Action":         s["Action"],
                     "Ticker":         s["Ticker"],
@@ -1330,6 +1473,7 @@ def main():
                     "Est. Proceeds":  f"${s['Est. Proceeds']:,.2f}",
                     "You Own":        s["You Own"],
                     "Score":          s["Score"],
+                    "Ex-Div":         s.get("Ex-Div", "⚪"),
                     "Reason":         s["Reason"],
                 } for s in sells])
                 st.dataframe(sell_df, hide_index=True, use_container_width=True)
@@ -1341,16 +1485,18 @@ def main():
             # ── BUY ───────────────────────────────────────────────────────
             if buys:
                 st.markdown("### 🟢 Buy")
-                st.caption("Add these positions to reach the target allocation.")
+                st.caption("Add these positions to reach the target allocation. "
+                           "Buy before ex-div date to capture the next distribution.")
                 buy_df = pd.DataFrame([{
-                    "Ticker":         b["Ticker"],
-                    "Shares to Buy":  b["Shares to Buy"],
-                    "@ Price":        f"${b['@ Price']:.2f}",
-                    "Est. Cost":      f"${b['Est. Cost']:,.2f}",
+                    "Ticker":            b["Ticker"],
+                    "Shares to Buy":     b["Shares to Buy"],
+                    "@ Price":           f"${b['@ Price']:.2f}",
+                    "Est. Cost":         f"${b['Est. Cost']:,.2f}",
                     "You Currently Own": b["You Own"],
-                    "Target Shares":  b["Target Shares"],
-                    "Yield":          b["Yield"],
-                    "Score":          b["Score"],
+                    "Target Shares":     b["Target Shares"],
+                    "Yield":             b["Yield"],
+                    "Score":             b["Score"],
+                    "Ex-Div":            b.get("Ex-Div", "⚪"),
                 } for b in buys])
                 st.dataframe(buy_df, hide_index=True, use_container_width=True)
             else:
@@ -1360,20 +1506,26 @@ def main():
 
             # ── HOLD ─────────────────────────────────────────────────────
             st.markdown("### 🟡 Hold — No action needed")
-            st.caption("These positions are within 1.5% of their target weight. Do nothing.")
+            st.caption("Within 1.5% of target weight, or held to collect an imminent dividend.")
             if holds:
-                hold_df = pd.DataFrame([{
-                    "Ticker":        h["Ticker"],
-                    "You Own":       h["You Own"],
-                    "Target Shares": h["Target Shares"],
-                    "@ Price":       f"${h['@ Price']:.2f}",
-                    "Current $":     f"${h['Current $']:,.0f}",
-                    "Target $":      f"${h['Target $']:,.0f}",
-                    "Diff":          h["Diff"],
-                    "Yield":         h["Yield"],
-                    "Score":         h["Score"],
-                } for h in holds])
-                st.dataframe(hold_df, hide_index=True, use_container_width=True)
+                hold_rows = []
+                for h in holds:
+                    row = {
+                        "Ticker":        h["Ticker"],
+                        "You Own":       h["You Own"],
+                        "Target Shares": h["Target Shares"],
+                        "@ Price":       f"${h['@ Price']:.2f}",
+                        "Current $":     f"${h['Current $']:,.0f}",
+                        "Target $":      f"${h['Target $']:,.0f}",
+                        "Diff":          h["Diff"],
+                        "Yield":         h["Yield"],
+                        "Score":         h["Score"],
+                        "Ex-Div":        h.get("Ex-Div", "⚪"),
+                    }
+                    if h.get("Note"):
+                        row["Note"] = h["Note"]
+                    hold_rows.append(row)
+                st.dataframe(pd.DataFrame(hold_rows), hide_index=True, use_container_width=True)
             else:
                 st.info("No positions currently at target weight.")
 

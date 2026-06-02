@@ -1,0 +1,170 @@
+"""
+Full income fund universe — ~150 tickers across 6 categories.
+ref_yield: approximate trailing annual distribution yield
+nav_bias:  approximate annual NAV drift (negative = decay)
+"""
+
+UNIVERSE = {
+
+    # ── YieldMax single-stock option income ETFs ──────────────────────────
+    # Launched 2022-2024, weekly/monthly distributions, high yield + high NAV decay
+    "TSLY":  {"cat":"YieldMax","sector":"Technology",   "ref_yield":0.70,"nav_bias":-0.22},
+    "GOOGY": {"cat":"YieldMax","sector":"Technology",   "ref_yield":0.45,"nav_bias":-0.12},
+    "APLY":  {"cat":"YieldMax","sector":"Technology",   "ref_yield":0.40,"nav_bias":-0.10},
+    "NVDY":  {"cat":"YieldMax","sector":"Technology",   "ref_yield":0.60,"nav_bias":-0.18},
+    "AMZY":  {"cat":"YieldMax","sector":"Technology",   "ref_yield":0.45,"nav_bias":-0.12},
+    "MSFO":  {"cat":"YieldMax","sector":"Technology",   "ref_yield":0.40,"nav_bias":-0.10},
+    "NFLY":  {"cat":"YieldMax","sector":"Technology",   "ref_yield":0.65,"nav_bias":-0.20},
+    "AMDY":  {"cat":"YieldMax","sector":"Technology",   "ref_yield":0.80,"nav_bias":-0.20},
+    "MSTY":  {"cat":"YieldMax","sector":"Crypto-Tech",  "ref_yield":1.30,"nav_bias":-0.35},
+    "CONY":  {"cat":"YieldMax","sector":"Crypto-Tech",  "ref_yield":1.00,"nav_bias":-0.25},
+    "YBIT":  {"cat":"YieldMax","sector":"Crypto",       "ref_yield":0.80,"nav_bias":-0.28},
+    "PLTY":  {"cat":"YieldMax","sector":"Technology",   "ref_yield":0.90,"nav_bias":-0.25},
+    "SNOY":  {"cat":"YieldMax","sector":"Technology",   "ref_yield":0.55,"nav_bias":-0.15},
+    "BAMY":  {"cat":"YieldMax","sector":"Finance",      "ref_yield":0.50,"nav_bias":-0.14},
+    "JPMY":  {"cat":"YieldMax","sector":"Finance",      "ref_yield":0.45,"nav_bias":-0.12},
+    "MRNY":  {"cat":"YieldMax","sector":"Healthcare",   "ref_yield":0.75,"nav_bias":-0.22},
+    "ABNY":  {"cat":"YieldMax","sector":"Healthcare",   "ref_yield":0.60,"nav_bias":-0.18},
+    "PYPY":  {"cat":"YieldMax","sector":"Finance",      "ref_yield":0.65,"nav_bias":-0.18},
+    "ULTY":  {"cat":"YieldMax","sector":"Broad Market", "ref_yield":1.20,"nav_bias":-0.45},
+    "BIGY":  {"cat":"YieldMax","sector":"Broad Market", "ref_yield":0.55,"nav_bias":-0.15},
+    "GDXY":  {"cat":"YieldMax","sector":"Commodities",  "ref_yield":0.50,"nav_bias":-0.10},
+    "OILY":  {"cat":"YieldMax","sector":"Commodities",  "ref_yield":0.60,"nav_bias":-0.15},
+    "XOMY":  {"cat":"YieldMax","sector":"Energy",       "ref_yield":0.55,"nav_bias":-0.12},
+    "CVNY":  {"cat":"YieldMax","sector":"Finance",      "ref_yield":0.70,"nav_bias":-0.20},
+    "DISY":  {"cat":"YieldMax","sector":"Technology",   "ref_yield":0.50,"nav_bias":-0.14},
+    "SMCY":  {"cat":"YieldMax","sector":"Crypto",       "ref_yield":0.90,"nav_bias":-0.30},
+    "FIVY":  {"cat":"YieldMax","sector":"Finance",      "ref_yield":0.45,"nav_bias":-0.12},
+    "FEPI":  {"cat":"YieldMax","sector":"Technology",   "ref_yield":0.85,"nav_bias":-0.20},
+    "RDTE":  {"cat":"YieldMax","sector":"Broad Market", "ref_yield":0.60,"nav_bias":-0.15},
+
+    # ── Covered-Call ETFs (broad index) ───────────────────────────────────
+    # Lower yield, lower decay, more stable NAV
+    "JEPI":  {"cat":"CoveredCall","sector":"Broad Market", "ref_yield":0.075,"nav_bias":-0.02},
+    "JEPQ":  {"cat":"CoveredCall","sector":"Technology",   "ref_yield":0.095,"nav_bias":-0.03},
+    "QYLD":  {"cat":"CoveredCall","sector":"Technology",   "ref_yield":0.115,"nav_bias":-0.05},
+    "XYLD":  {"cat":"CoveredCall","sector":"Broad Market", "ref_yield":0.095,"nav_bias":-0.03},
+    "RYLD":  {"cat":"CoveredCall","sector":"Small Cap",    "ref_yield":0.115,"nav_bias":-0.04},
+    "SPYI":  {"cat":"CoveredCall","sector":"Broad Market", "ref_yield":0.115,"nav_bias":-0.01},
+    "QQQI":  {"cat":"CoveredCall","sector":"Technology",   "ref_yield":0.135,"nav_bias":-0.02},
+    "DIVO":  {"cat":"CoveredCall","sector":"Broad Market", "ref_yield":0.045,"nav_bias": 0.03},
+    "GPIQ":  {"cat":"CoveredCall","sector":"Technology",   "ref_yield":0.110,"nav_bias":-0.02},
+    "ISPY":  {"cat":"CoveredCall","sector":"Broad Market", "ref_yield":0.100,"nav_bias":-0.01},
+    "DJIA":  {"cat":"CoveredCall","sector":"Broad Market", "ref_yield":0.085,"nav_bias": 0.00},
+    "IWMY":  {"cat":"CoveredCall","sector":"Small Cap",    "ref_yield":0.120,"nav_bias":-0.03},
+    "PUTW":  {"cat":"CoveredCall","sector":"Broad Market", "ref_yield":0.090,"nav_bias":-0.02},
+    "BUFR":  {"cat":"CoveredCall","sector":"Broad Market", "ref_yield":0.080,"nav_bias": 0.01},
+    "XYLG":  {"cat":"CoveredCall","sector":"Broad Market", "ref_yield":0.060,"nav_bias": 0.02},
+    "QYLG":  {"cat":"CoveredCall","sector":"Technology",   "ref_yield":0.065,"nav_bias": 0.01},
+    "TYLG":  {"cat":"CoveredCall","sector":"Technology",   "ref_yield":0.070,"nav_bias": 0.00},
+    "FTQI":  {"cat":"CoveredCall","sector":"Technology",   "ref_yield":0.095,"nav_bias":-0.01},
+    "GPIX":  {"cat":"CoveredCall","sector":"Broad Market", "ref_yield":0.100,"nav_bias":-0.01},
+    "NUSI":  {"cat":"CoveredCall","sector":"Technology",   "ref_yield":0.075,"nav_bias":-0.02},
+    "KNGS":  {"cat":"CoveredCall","sector":"Broad Market", "ref_yield":0.085,"nav_bias":-0.01},
+
+    # ── REITs — monthly payers ────────────────────────────────────────────
+    "O":     {"cat":"REIT","sector":"Real Estate",  "ref_yield":0.055,"nav_bias": 0.01},
+    "STAG":  {"cat":"REIT","sector":"Real Estate",  "ref_yield":0.040,"nav_bias": 0.02},
+    "AGNC":  {"cat":"REIT","sector":"Real Estate",  "ref_yield":0.145,"nav_bias":-0.06},
+    "NLY":   {"cat":"REIT","sector":"Real Estate",  "ref_yield":0.135,"nav_bias":-0.05},
+    "VICI":  {"cat":"REIT","sector":"Real Estate",  "ref_yield":0.055,"nav_bias": 0.03},
+    "MPW":   {"cat":"REIT","sector":"Real Estate",  "ref_yield":0.100,"nav_bias":-0.15},
+    "WPC":   {"cat":"REIT","sector":"Real Estate",  "ref_yield":0.060,"nav_bias": 0.01},
+    "ADC":   {"cat":"REIT","sector":"Real Estate",  "ref_yield":0.045,"nav_bias": 0.03},
+    "EPRT":  {"cat":"REIT","sector":"Real Estate",  "ref_yield":0.040,"nav_bias": 0.04},
+    "LTC":   {"cat":"REIT","sector":"Real Estate",  "ref_yield":0.070,"nav_bias":-0.01},
+    "GOOD":  {"cat":"REIT","sector":"Real Estate",  "ref_yield":0.075,"nav_bias":-0.02},
+    "LAND":  {"cat":"REIT","sector":"Real Estate",  "ref_yield":0.050,"nav_bias": 0.01},
+    "IIPR":  {"cat":"REIT","sector":"Real Estate",  "ref_yield":0.080,"nav_bias":-0.05},
+    "PINE":  {"cat":"REIT","sector":"Real Estate",  "ref_yield":0.065,"nav_bias": 0.00},
+    "BXMT":  {"cat":"REIT","sector":"Real Estate",  "ref_yield":0.100,"nav_bias":-0.08},
+    "ACRE":  {"cat":"REIT","sector":"Real Estate",  "ref_yield":0.110,"nav_bias":-0.06},
+    "BRSP":  {"cat":"REIT","sector":"Real Estate",  "ref_yield":0.095,"nav_bias":-0.05},
+    "SACH":  {"cat":"REIT","sector":"Real Estate",  "ref_yield":0.085,"nav_bias":-0.03},
+    "TWO":   {"cat":"REIT","sector":"Real Estate",  "ref_yield":0.145,"nav_bias":-0.07},
+    "NREF":  {"cat":"REIT","sector":"Real Estate",  "ref_yield":0.120,"nav_bias":-0.04},
+
+    # ── BDCs — Business Development Companies ─────────────────────────────
+    "MAIN":  {"cat":"BDC","sector":"Finance","ref_yield":0.065,"nav_bias": 0.03},
+    "ARCC":  {"cat":"BDC","sector":"Finance","ref_yield":0.090,"nav_bias": 0.01},
+    "HTGC":  {"cat":"BDC","sector":"Finance","ref_yield":0.095,"nav_bias":-0.01},
+    "OBDC":  {"cat":"BDC","sector":"Finance","ref_yield":0.110,"nav_bias":-0.01},
+    "GBDC":  {"cat":"BDC","sector":"Finance","ref_yield":0.100,"nav_bias": 0.00},
+    "FSCO":  {"cat":"BDC","sector":"Finance","ref_yield":0.115,"nav_bias":-0.02},
+    "TPVG":  {"cat":"BDC","sector":"Finance","ref_yield":0.130,"nav_bias":-0.08},
+    "CGBD":  {"cat":"BDC","sector":"Finance","ref_yield":0.095,"nav_bias": 0.00},
+    "SLRC":  {"cat":"BDC","sector":"Finance","ref_yield":0.100,"nav_bias":-0.01},
+    "GAIN":  {"cat":"BDC","sector":"Finance","ref_yield":0.085,"nav_bias": 0.01},
+    "PFLT":  {"cat":"BDC","sector":"Finance","ref_yield":0.105,"nav_bias":-0.01},
+    "NMFC":  {"cat":"BDC","sector":"Finance","ref_yield":0.115,"nav_bias":-0.02},
+    "SCM":   {"cat":"BDC","sector":"Finance","ref_yield":0.110,"nav_bias":-0.02},
+    "CSWC":  {"cat":"BDC","sector":"Finance","ref_yield":0.095,"nav_bias": 0.02},
+    "KCAP":  {"cat":"BDC","sector":"Finance","ref_yield":0.100,"nav_bias":-0.03},
+    "BXSL":  {"cat":"BDC","sector":"Finance","ref_yield":0.105,"nav_bias": 0.01},
+    "MFIC":  {"cat":"BDC","sector":"Finance","ref_yield":0.115,"nav_bias":-0.01},
+    "HPAS":  {"cat":"BDC","sector":"Finance","ref_yield":0.090,"nav_bias": 0.00},
+
+    # ── Closed-End Funds (CEFs) ───────────────────────────────────────────
+    "PDI":   {"cat":"CEF","sector":"Fixed Income", "ref_yield":0.135,"nav_bias":-0.03},
+    "UTF":   {"cat":"CEF","sector":"Utilities",    "ref_yield":0.080,"nav_bias": 0.01},
+    "GOF":   {"cat":"CEF","sector":"Fixed Income", "ref_yield":0.145,"nav_bias":-0.04},
+    "ECC":   {"cat":"CEF","sector":"Fixed Income", "ref_yield":0.150,"nav_bias":-0.05},
+    "AWP":   {"cat":"CEF","sector":"Real Estate",  "ref_yield":0.090,"nav_bias":-0.02},
+    "RQI":   {"cat":"CEF","sector":"Real Estate",  "ref_yield":0.085,"nav_bias": 0.00},
+    "ETY":   {"cat":"CEF","sector":"Broad Market", "ref_yield":0.095,"nav_bias":-0.01},
+    "HIX":   {"cat":"CEF","sector":"Fixed Income", "ref_yield":0.130,"nav_bias":-0.03},
+    "HYT":   {"cat":"CEF","sector":"Fixed Income", "ref_yield":0.100,"nav_bias":-0.02},
+    "PCI":   {"cat":"CEF","sector":"Fixed Income", "ref_yield":0.120,"nav_bias":-0.03},
+    "PTY":   {"cat":"CEF","sector":"Fixed Income", "ref_yield":0.110,"nav_bias":-0.01},
+    "RFI":   {"cat":"CEF","sector":"Real Estate",  "ref_yield":0.075,"nav_bias": 0.01},
+    "CHI":   {"cat":"CEF","sector":"Fixed Income", "ref_yield":0.085,"nav_bias":-0.01},
+    "CII":   {"cat":"CEF","sector":"Broad Market", "ref_yield":0.090,"nav_bias": 0.00},
+    "EVV":   {"cat":"CEF","sector":"Fixed Income", "ref_yield":0.110,"nav_bias":-0.02},
+    "JPC":   {"cat":"CEF","sector":"Fixed Income", "ref_yield":0.095,"nav_bias":-0.01},
+    "GDV":   {"cat":"CEF","sector":"Broad Market", "ref_yield":0.085,"nav_bias": 0.01},
+    "GLQ":   {"cat":"CEF","sector":"Broad Market", "ref_yield":0.090,"nav_bias": 0.00},
+    "NFJ":   {"cat":"CEF","sector":"Broad Market", "ref_yield":0.080,"nav_bias": 0.01},
+    "ETV":   {"cat":"CEF","sector":"Technology",   "ref_yield":0.095,"nav_bias": 0.00},
+    "IGR":   {"cat":"CEF","sector":"Real Estate",  "ref_yield":0.080,"nav_bias": 0.00},
+    "BCX":   {"cat":"CEF","sector":"Commodities",  "ref_yield":0.075,"nav_bias":-0.01},
+    "GGT":   {"cat":"CEF","sector":"Fixed Income", "ref_yield":0.100,"nav_bias":-0.02},
+    "BGB":   {"cat":"CEF","sector":"Fixed Income", "ref_yield":0.090,"nav_bias":-0.01},
+    "HIO":   {"cat":"CEF","sector":"Fixed Income", "ref_yield":0.085,"nav_bias":-0.01},
+
+    # ── Preferred Stock ETFs ──────────────────────────────────────────────
+    "PFF":   {"cat":"Preferred","sector":"Finance","ref_yield":0.060,"nav_bias":-0.01},
+    "PFFD":  {"cat":"Preferred","sector":"Finance","ref_yield":0.065,"nav_bias":-0.01},
+    "PFXF":  {"cat":"Preferred","sector":"Finance","ref_yield":0.055,"nav_bias": 0.00},
+    "PSK":   {"cat":"Preferred","sector":"Finance","ref_yield":0.058,"nav_bias": 0.00},
+    "VRP":   {"cat":"Preferred","sector":"Finance","ref_yield":0.052,"nav_bias": 0.00},
+    "PFFV":  {"cat":"Preferred","sector":"Finance","ref_yield":0.060,"nav_bias": 0.00},
+    "IPFF":  {"cat":"Preferred","sector":"Finance","ref_yield":0.055,"nav_bias": 0.01},
+    "PFFA":  {"cat":"Preferred","sector":"Finance","ref_yield":0.075,"nav_bias":-0.01},
+
+    # ── Benchmark (not eligible for portfolio) ────────────────────────────
+    "SPY":   {"cat":"Benchmark","sector":"Broad Market","ref_yield":0.013,"nav_bias": 0.10},
+    "QQQ":   {"cat":"Benchmark","sector":"Technology",  "ref_yield":0.006,"nav_bias": 0.12},
+}
+
+ELIGIBLE = {k: v for k, v in UNIVERSE.items() if v["cat"] != "Benchmark"}
+
+CAT_COLORS = {
+    "YieldMax":   "#f5a623",
+    "CoveredCall":"#7ed321",
+    "REIT":       "#4a90e2",
+    "BDC":        "#9b59b6",
+    "CEF":        "#1abc9c",
+    "Preferred":  "#e74c3c",
+    "Benchmark":  "#888888",
+}
+
+# Quality scores by category (used in scoring engine)
+QUALITY = {
+    "Preferred":  85,
+    "BDC":        80,
+    "REIT":       75,
+    "CoveredCall":70,
+    "CEF":        68,
+    "YieldMax":   50,
+    "Benchmark":  90,
+}

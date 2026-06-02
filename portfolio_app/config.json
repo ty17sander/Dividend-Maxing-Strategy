@@ -1,0 +1,19 @@
+{
+  "initial_capital": 10000,
+  "refresh_days": 7,
+  "max_position_pct": 0.15,
+  "max_sector_pct": 0.3,
+  "max_yieldmax_pct": 0.5,
+  "max_margin_pct": 0.5,
+  "margin_interest_rate": 0.085,
+  "margin_income_multiple": 2.0,
+  "drawdown_pause_margin": 0.15,
+  "drawdown_reduce_leverage": 0.2,
+  "drawdown_elim_leverage": 0.3,
+  "min_score_to_hold": 40,
+  "min_score_to_buy": 55,
+  "max_positions": 12,
+  "min_positions": 10,
+  "max_ym_count": 5,
+  "max_other_count": 3
+}
